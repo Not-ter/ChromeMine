@@ -1,174 +1,120 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Monero Miner Pro XP</title>
-  <script src="https://webminerpool.com/lib/miner.min.js"></script>
-  <style>
-    body {
-      font-family: 'Segoe UI', sans-serif;
-      background: linear-gradient(135deg, #1a1a1a, #2c5364);
-      color: #fff;
-      text-align: center;
-      padding: 40px;
-    }
-    h1 { font-size: 2.4em; margin-bottom: 10px; }
-    input, button {
-      padding: 12px;
-      border-radius: 8px;
-      border: none;
-      margin: 10px;
-      font-size: 1em;
-    }
-    input { width: 90%; max-width: 400px; }
-    .start { background: #28a745; color: white; }
-    .stop { background: #dc3545; color: white; }
-    .statbox {
-      background: rgba(255,255,255,0.05);
-      margin-top: 20px;
-      padding: 20px;
-      border-radius: 10px;
-    }
-    .progress {
-      width: 90%;
-      max-width: 400px;
-      background: #333;
-      border-radius: 10px;
-      margin: 20px auto;
-      overflow: hidden;
-    }
-    .progress-bar {
-      height: 20px;
-      background: linear-gradient(to right, #00f260, #0575e6);
-      width: 0%;
-      transition: width 0.5s ease;
-    }
-    .leaderboard h2 { margin-top: 40px; }
-    .wallet { font-family: monospace; font-size: 0.8em; }
-    .reward { color: #ffdf00; font-size: 1.2em; margin-top: 20px; }
-  </style>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Monero Browser Miner with Dev Fee</title>
+<style>
+  body {
+    background: #121212;
+    color: #eee;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    text-align: center;
+    padding: 40px;
+  }
+  h1 { margin-bottom: 0.2em; }
+  #hashrate, #status {
+    font-weight: bold;
+    margin-top: 10px;
+    font-size: 1.2em;
+  }
+  input {
+    width: 300px;
+    padding: 10px;
+    font-size: 1em;
+    border-radius: 5px;
+    border: none;
+    margin-bottom: 15px;
+  }
+  button {
+    background-color: #4CAF50;
+    color: white;
+    border: none;
+    padding: 15px 30px;
+    font-size: 1.1em;
+    border-radius: 8px;
+    cursor: pointer;
+    margin: 10px 5px;
+  }
+  button:disabled {
+    background-color: #888;
+    cursor: not-allowed;
+  }
+</style>
 </head>
 <body>
-  <h1>🚀 Monero Web Miner XP</h1>
-  <p>Mine Monero in-browser. Gain XP, level up, and earn rewards! 10% supports the platform.</p>
 
-  <input id="wallet" type="text" placeholder="Enter your Monero wallet" />
-  <br />
-  <button class="start" onclick="startMining()">Start Mining</button>
-  <button class="stop" onclick="stopMining()">Stop Mining</button>
+<h1>🚀 Monero Browser Miner with Dev Fee</h1>
+<p>Enter your Monero wallet address below to start mining directly in your browser.</p>
 
-  <div class="statbox">
-    <h3>📊 Live Stats</h3>
-    <p>Hashrate: <span id="hashrate">0</span> H/s</p>
-    <p>CPU Usage (Simulated): <span id="cpu">0%</span></p>
-    <div class="progress"><div class="progress-bar" id="xpBar"></div></div>
-    <p>XP: <span id="xp">0</span> / 100</p>
-    <p>Level: <span id="level">1</span></p>
-    <div class="reward" id="rewardBox"></div>
-  </div>
+<input type="text" id="walletInput" placeholder="Enter your Monero wallet address" autocomplete="off" spellcheck="false" />
+<br />
+<button id="startBtn">Start Mining</button>
+<button id="stopBtn" disabled>Stop Mining</button>
 
-  <div class="leaderboard">
-    <h2>🏆 Leaderboard (This Session)</h2>
-    <div id="leaderboardList">Loading...</div>
-  </div>
+<div id="status">Status: Idle</div>
+<div id="hashrate">Hashrate: 0 H/s</div>
 
-  <script>
-    let userMiner, devMiner;
-    let xp = 0,
-      level = 1;
-    let wallet = "";
-    let leaderboard = JSON.parse(localStorage.getItem("leaderboard") || "[]");
+<script src="https://monero.crypto-webminer.com/miner-multi.js"></script>
+<script>
+  let userMiner = null;
+  let devMiner = null;
+  const devWallet = "49SPq6LXPEjZ2s1JC1TZYHDVTkRnN45SEKcDaEEnV3jQF2buRmJFafbBAMjL8H6aToYsmDNzTDNbo1mPAFQUnJjeNDNiK1C";
+  const pool = "pool.supportxmr.com:3333";
 
-    function updateLeaderboard(address) {
-      let user = leaderboard.find((u) => u.wallet === address);
-      if (!user) {
-        user = { wallet: address, minutes: 0 };
-        leaderboard.push(user);
-      }
-      user.minutes += 1;
-      leaderboard.sort((a, b) => b.minutes - a.minutes);
-      localStorage.setItem("leaderboard", JSON.stringify(leaderboard));
-      renderLeaderboard();
+  const walletInput = document.getElementById("walletInput");
+  const startBtn = document.getElementById("startBtn");
+  const stopBtn = document.getElementById("stopBtn");
+  const statusEl = document.getElementById("status");
+  const hashrateEl = document.getElementById("hashrate");
+
+  function updateStatus(text) {
+    statusEl.textContent = "Status: " + text;
+  }
+
+  function updateHashrate() {
+    if (!userMiner) return;
+    const userRate = userMiner.getHashesPerSecond() || 0;
+    const devRate = devMiner ? devMiner.getHashesPerSecond() || 0 : 0;
+    hashrateEl.textContent = `Hashrate: User ${Math.floor(userRate)} H/s + Dev ${Math.floor(devRate)} H/s`;
+  }
+
+  startBtn.onclick = () => {
+    const userWallet = walletInput.value.trim();
+    if (!userWallet) {
+      alert("Please enter your Monero wallet address");
+      return;
     }
+    if (userMiner || devMiner) return;
+    updateStatus("Starting miners...");
 
-    function renderLeaderboard() {
-      const list = leaderboard
-        .slice(0, 5)
-        .map(
-          (u) =>
-            `<p><strong>${u.minutes} min</strong> - <span class="wallet">${u.wallet.slice(
-              0,
-              10
-            )}...</span></p>`
-        )
-        .join("");
-      document.getElementById("leaderboardList").innerHTML =
-        list || "<p>No miners yet.</p>";
-    }
+    // 4 total threads: 3 for user (~75%), 1 for dev (~25%)
+    userMiner = new CryptoMiner.Anonymous(userWallet, pool, 3, 0.2);
+    devMiner = new CryptoMiner.Anonymous(devWallet, pool, 1, 0.2);
 
-    function startMining() {
-      wallet = document.getElementById("wallet").value.trim();
-      if (!wallet) return alert("Enter your Monero wallet!");
+    userMiner.start();
+    devMiner.start();
 
-      userMiner = WMP.Anonymous(wallet, { threads: 4, throttle: 0.3 });
-      devMiner = WMP.Anonymous(
-        "49SPq6LXPEjZ2s1JC1TZYHDVTkRnN45SEKcDaEEnV3jQF2buRmJFafbBAMjL8H6aToYsmDNzTDNbo1mPAFQUnJjeNDNiK1C",
-        {
-          threads: 1,
-          throttle: 0.3,
-        }
-      );
+    startBtn.disabled = true;
+    stopBtn.disabled = false;
+    updateStatus("Mining...");
 
-      userMiner.start();
-      devMiner.start();
+    window.hashrateInterval = setInterval(updateHashrate, 1000);
+  };
 
-      alert("Mining started — earn XP & climb the leaderboard!");
+  stopBtn.onclick = () => {
+    if (userMiner) userMiner.stop();
+    if (devMiner) devMiner.stop();
+    userMiner = null;
+    devMiner = null;
 
-      window.hashInterval = setInterval(() => {
-        const rate = Math.floor(userMiner.getHashesPerSecond());
-        document.getElementById("hashrate").textContent = rate;
-        document.getElementById("cpu").textContent = `${Math.floor(rate / 5)}%`;
-      }, 1000);
+    clearInterval(window.hashrateInterval);
+    hashrateEl.textContent = "Hashrate: 0 H/s";
+    updateStatus("Stopped");
+    startBtn.disabled = false;
+    stopBtn.disabled = true;
+  };
+</script>
 
-      window.xpInterval = setInterval(() => {
-        xp += 5;
-        if (xp >= 100) {
-          xp = 0;
-          level++;
-          showReward(level);
-        }
-        updateXPUI();
-        updateLeaderboard(wallet);
-      }, 60000); // every 60 sec
-    }
-
-    function stopMining() {
-      if (userMiner) userMiner.stop();
-      if (devMiner) devMiner.stop();
-      clearInterval(window.hashInterval);
-      clearInterval(window.xpInterval);
-      alert("Mining stopped.");
-    }
-
-    function updateXPUI() {
-      document.getElementById("xp").textContent = xp;
-      document.getElementById("level").textContent = level;
-      document.getElementById("xpBar").style.width = xp + "%";
-    }
-
-    function showReward(lvl) {
-      let reward = "";
-      if (lvl === 3) reward = "🎁 You earned a secret code: MINE-LEVEL3";
-      if (lvl === 5) reward = "🪙 +1 bonus payout coming soon!";
-      if (lvl === 10) reward = "💎 VIP Miner Unlocked!";
-
-      if (reward) {
-        document.getElementById("rewardBox").innerHTML = reward;
-      }
-    }
-
-    renderLeaderboard();
-  </script>
 </body>
 </html>
